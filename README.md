@@ -1,4 +1,4 @@
-# Textbook Tutor
+# Socrates Textbook Tutor
 
 An AI-powered interactive audiobook for technical textbooks. Text is read aloud while an AI quizzes you, evaluates your answers, and answers follow-up questions conversationally — mid-session.
 
