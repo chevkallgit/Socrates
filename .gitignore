@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# Data — never commit PDFs or generated data files
+*.pdf
+chunks.json
+*.json
+
+# ChromaDB local storage
+chroma_db/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables (secrets)
+.env
+.env.*

@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  pipeline:
+    name: Python pipeline
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        working-directory: pipeline
+        run: |
+          pip install -r requirements.txt
+          pip install ruff pytest
+
+      - name: Lint with ruff
+        working-directory: pipeline
+        run: ruff check .
+
+      - name: Run tests
+        working-directory: pipeline
+        run: pytest tests/ -v
