@@ -1,6 +1,6 @@
 # Socrates Textbook Tutor
 
-An AI-powered interactive audiobook for technical textbooks. Text is read aloud while an AI quizzes you, evaluates your answers, and answers follow-up questions conversationally — mid-session.
+An AI-powered interactive audiobook for technical textbooks. Text is read aloud while an AI quizzes you, evaluates your answers, and answers follow-up questions conversationally mid-session.
 
 > Currently in active development. See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to run the project locally.
 
@@ -9,7 +9,7 @@ An AI-powered interactive audiobook for technical textbooks. Text is read aloud 
 ## Architecture
 
 ```
-textbook-tutor/
+Soctates/
 ├── pipeline/       # Python — PDF extraction, embeddings, vector DB ingestion
 ├── api/            # Go — session orchestration, LLM calls, TTS (planned)
 └── mobile/         # React Native / Expo — iOS + Android app (planned)
