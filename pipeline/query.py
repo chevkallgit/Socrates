@@ -5,7 +5,7 @@ Semantic search against the ChromaDB vector database.
 
 Given a natural language question, finds the most relevant chunks from the
 textbook. This is the retrieval half of a RAG (Retrieval-Augmented Generation)
-pipeline — later the Go API will call something like this, then pass the
+pipeline, later the Go API will call something like this, then pass the
 results to an LLM to generate a grounded answer.
 
 Usage:
@@ -21,7 +21,7 @@ import argparse
 import chromadb
 from chromadb.utils import embedding_functions
 
-from embed import COLLECTION_NAME, EMBEDDING_MODEL
+from pipeline.embed import COLLECTION_NAME, EMBEDDING_MODEL
 
 
 # ---------------------------------------------------------------------------

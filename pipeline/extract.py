@@ -3,7 +3,7 @@ extract.py
 ----------
 Extracts structured text from a textbook PDF.
 
-Produces a list of chunks — each chunk is a piece of body text tagged with
+Produces a list of chunks, each chunk is a piece of body text tagged with
 which chapter and section it belongs to. This output feeds into embed.py,
 which loads it into the vector database.
 
@@ -36,7 +36,7 @@ import pdfplumber
 
 @dataclass
 class Node:
-    """A chapter or section heading — the structural skeleton of the book."""
+    """A chapter or section heading - the structural skeleton of the book."""
 
     id: int
     type: str        # "chapter" or "section"
@@ -75,7 +75,7 @@ def extract_words(pdf_path: str, page_start: int, page_end: int) -> pd.DataFrame
       - x0:     left edge of the word bounding box
       - height: rendered font height
 
-    We use `with` so the file handle is always closed — even if an exception
+    We use `with` so the file handle is always closed, even if an exception
     occurs mid-loop. This is a Python best practice for any resource that
     needs to be explicitly released (files, DB connections, network sockets).
     """
@@ -139,11 +139,9 @@ def classify_lines(lines_df: pd.DataFrame) -> pd.DataFrame:
     Determines the structural role of each line based on font size.
 
     The most common font height in the document is assumed to be body text.
-    Headings are larger — we use multiples of the body size as thresholds.
+    Headings are larger, we use multiples of the body size as thresholds.
 
-    BUG FIX (vs original): the original version merged all same-height lines
-    on the same page together, collapsing entire paragraphs into one row.
-    We now only merge lines that are *adjacent* (consecutive in the sorted
+    We only merge lines that are *adjacent* (consecutive in the sorted
     DataFrame) — which handles multi-line headings without destroying paragraphs.
     """
     # Find the modal (most common) font height — this is body text size.
@@ -220,7 +218,14 @@ def filter_noise(lines_df: pd.DataFrame) -> pd.DataFrame:
         lines_df["top_pct"] < 0.12
     ) & lines_df["text"].str.match(r"^(CHAPTER|PART)\s+\d+", re.IGNORECASE)
 
-    keep = ~(positional_noise | numeric_noise | running_header_noise)
+    # footer noise: lines like "Chapter 1 | Reliable, Scalable, and Maintainable"
+    chapter_footer_noise = lines_df["text"].str.match(
+        r"^\d+\s*\|\s*(Chapter|Part|Appendix)", re.IGNORECASE
+    )
+
+    footnote_noise = lines_df["text"].str.match(r"^[ivxlcdm]+\.\s", re.IGNORECASE)
+
+    keep = ~(positional_noise | numeric_noise | running_header_noise | chapter_footer_noise | footnote_noise)
     filtered = lines_df[keep].reset_index(drop=True)
 
     removed_count = len(lines_df) - len(filtered)
@@ -228,9 +233,42 @@ def filter_noise(lines_df: pd.DataFrame) -> pd.DataFrame:
 
     return filtered
 
+# ---------------------------------------------------------------------------
+# Step 5: Merge consecutive body lines into paragraphs
+# ---------------------------------------------------------------------------
+
+def merge_paragraphs(lines_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Merges consecutive body lines into paragraphs.
+    A new paragraph starts when:
+      - The line type changes (body -> heading etc.)
+      - We're on a different page
+      - There's a vertical gap > 1.5x the line height (blank line between paragraphs)
+    Heading lines are passed through unchanged.
+    """
+    merged = []
+    
+    for _, row in lines_df.iterrows():
+        r = row.to_dict()
+        
+        if r["type"] != "body":
+            merged.append(r)
+            continue
+        
+        if (
+            merged
+            and merged[-1]["type"] == "body"
+            and merged[-1]["page"] == r["page"]
+            and (r["top"] - merged[-1]["top"]) < merged[-1]["height"] * 2.5
+        ):
+            merged[-1]["text"] += " " + r["text"]
+        else:
+            merged.append(r)
+    
+    return pd.DataFrame(merged)
 
 # ---------------------------------------------------------------------------
-# Step 5: Build nodes (structure) and chunks (content)
+# Step 6: Build nodes (structure) and chunks (content)
 # ---------------------------------------------------------------------------
 
 
@@ -241,10 +279,6 @@ def build_nodes_and_chunks(
     Walks through the classified lines and builds two lists:
       - nodes:  the structural skeleton (chapters and sections)
       - chunks: the actual text content, each linked to its parent node
-
-    BUG FIX (vs original): orphaned chunks (text before the first chapter)
-    were silently getting node_id=None. We now assign them to a synthetic
-    "front matter" node so nothing is lost and the DB has no null foreign keys.
 
     The logic works like a state machine: as we scan lines top-to-bottom,
     we track the "current chapter" and "current section". When we hit a
@@ -338,9 +372,8 @@ def build_nodes_and_chunks(
 
 
 # ---------------------------------------------------------------------------
-# Step 6: Save output to JSON
+# Step 7: Save output to JSON
 # ---------------------------------------------------------------------------
-
 
 def save_output(
     nodes: list[Node],
@@ -386,8 +419,11 @@ def process(pdf_path: str, output_path: str, page_start: int, page_end: int) -> 
     print("  Filtering noise...")
     clean = filter_noise(classified)
 
+    print("  Merging paragraphs...")
+    merged = merge_paragraphs(clean)
+
     print("  Building nodes and chunks...")
-    nodes, chunks = build_nodes_and_chunks(clean)
+    nodes, chunks = build_nodes_and_chunks(merged)
 
     chapter_nodes = [n for n in nodes if n.type == "chapter"]
     print(f"\n  Found {len(chapter_nodes)} chapters:")

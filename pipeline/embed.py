@@ -66,7 +66,16 @@ def load_chunks(input_path: str) -> tuple[list[dict], list[dict]]:
         data = json.load(f)
 
     nodes = data["nodes"]
-    chunks = data["chunks"]
+
+    # Exclude structural noise — glossary, index, and front matter
+    # are not content we want searchable
+    EXCLUDED_TITLES = {"Glossary", "Index"}
+    excluded_ids = {
+        n["id"] for n in nodes
+        if n["type"] == "front_matter" or n["title"] in EXCLUDED_TITLES
+    }
+
+    chunks = [c for c in data["chunks"] if c["node_id"] not in excluded_ids]
 
     print(f"Loaded {len(nodes)} nodes and {len(chunks)} chunks from {input_path}")
     return nodes, chunks
