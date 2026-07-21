@@ -61,18 +61,30 @@ def load_chunks(input_path: str) -> tuple[list[dict], list[dict]]:
     """
     Reads the JSON file produced by extract.py.
     Returns (nodes, chunks) as plain dicts.
+
+    Filtering uses the book's own structure as the boundary, not magic numbers:
+      - Everything BEFORE the Table of Contents node is front matter
+        (title page, copyright, dedication) — excluded.
+      - Glossary and Index nodes are excluded (not prose content).
+    Every book has a TOC, so this generalises beyond DDIA.
     """
     with open(input_path, encoding="utf-8") as f:
         data = json.load(f)
 
     nodes = data["nodes"]
 
-    # Exclude structural noise — glossary, index, and front matter
-    # are not content we want searchable
+    # Find the Table of Contents node. Everything before it is front matter.
+    toc_id = next(
+        (n["id"] for n in nodes if n["title"].strip().lower() == "table of contents"),
+        None,
+    )
+
     EXCLUDED_TITLES = {"Glossary", "Index"}
+
     excluded_ids = {
         n["id"] for n in nodes
-        if n["type"] == "front_matter" or n["title"] in EXCLUDED_TITLES
+        if n["title"] in EXCLUDED_TITLES
+        or (toc_id is not None and n["id"] <= toc_id)   # front matter + the TOC itself
     }
 
     chunks = [c for c in data["chunks"] if c["node_id"] not in excluded_ids]

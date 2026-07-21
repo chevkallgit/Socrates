@@ -196,36 +196,32 @@ def filter_noise(lines_df: pd.DataFrame) -> pd.DataFrame:
     """
     Removes page numbers, running headers, and footers.
 
-    BUG FIX (vs original): the original used a fixed font-size cutoff (< 9.5pt)
-    to filter footers. This is fragile — page numbers in DDIA are the same size
-    as body text, so they slipped through.
-
-    We now filter by *position*: anything in the top 7% or bottom 7% of the
-    page is assumed to be a header/footer. This works regardless of font size.
-
-    We also filter lines that are purely numeric (page numbers like "42") or
-    match common running-header patterns seen in DDIA.
+    Filtering strategy (all general, not book-specific):
+      1. Position — anything in the top/bottom 7% of the page is header/footer.
+      2. Pure numbers — standalone page numbers like "42".
+      3. Running headers — a line that is just "<text> | <number>" or
+         "<number> | <text>". This is the classic book running-header format
+         (section title on one side, page number on the other) and is noise
+         regardless of which book it is.
+      4. Roman-numeral footnote markers like "ii. ".
     """
-    # Position-based: remove content very close to the page edges
+    # 1. Position-based: remove content very close to the page edges
     positional_noise = (lines_df["top_pct"] < 0.07) | (lines_df["top_pct"] > 0.93)
 
-    # Content-based: pure numbers are almost certainly page numbers
+    # 2. Pure numbers are almost certainly page numbers
     numeric_noise = lines_df["text"].str.strip().str.match(r"^\d+$")
 
-    # DDIA-specific: running headers like "CHAPTER 1. RELIABLE..." in the margin
-    # These appear as body-height text at the very top of pages
-    running_header_noise = (
-        lines_df["top_pct"] < 0.12
-    ) & lines_df["text"].str.match(r"^(CHAPTER|PART)\s+\d+", re.IGNORECASE)
-
-    # footer noise: lines like "Chapter 1 | Reliable, Scalable, and Maintainable"
-    chapter_footer_noise = lines_df["text"].str.match(
-        r"^\d+\s*\|\s*(Chapter|Part|Appendix)", re.IGNORECASE
+    # 3. Running headers in EITHER direction, as a standalone line:
+    #    "Problems with Replication Lag | 163"  (text | number)
+    #    "163 | Chapter 5. Replication"          (number | text)
+    running_header_noise = lines_df["text"].str.strip().str.match(
+        r"^(.+\s*\|\s*\d+|\d+\s*\|\s*.+)$"
     )
 
+    # 4. Roman-numeral footnote markers like "ii. ..."
     footnote_noise = lines_df["text"].str.match(r"^[ivxlcdm]+\.\s", re.IGNORECASE)
 
-    keep = ~(positional_noise | numeric_noise | running_header_noise | chapter_footer_noise | footnote_noise)
+    keep = ~(positional_noise | numeric_noise | running_header_noise | footnote_noise)
     filtered = lines_df[keep].reset_index(drop=True)
 
     removed_count = len(lines_df) - len(filtered)
@@ -240,31 +236,42 @@ def filter_noise(lines_df: pd.DataFrame) -> pd.DataFrame:
 def merge_paragraphs(lines_df: pd.DataFrame) -> pd.DataFrame:
     """
     Merges consecutive body lines into paragraphs.
+
     A new paragraph starts when:
-      - The line type changes (body -> heading etc.)
-      - We're on a different page
-      - There's a vertical gap > 1.5x the line height (blank line between paragraphs)
-    Heading lines are passed through unchanged.
+      - the line type changes (body -> heading etc.), or
+      - we move to a different page, or
+      - there's a vertical gap larger than a normal line spacing
+        (a blank line, signalling a paragraph break).
+
+    BUG FIX: we compare each line against the PREVIOUS line's top
+    (tracked via last_top), not the paragraph's first line. Comparing
+    against the first line made the gap grow as the paragraph grew,
+    causing paragraphs to split after a few lines.
     """
     merged = []
-    
+    last_top = None  # top of the immediately preceding line
+
     for _, row in lines_df.iterrows():
         r = row.to_dict()
-        
+
         if r["type"] != "body":
             merged.append(r)
+            last_top = None
             continue
-        
+
         if (
             merged
             and merged[-1]["type"] == "body"
             and merged[-1]["page"] == r["page"]
-            and (r["top"] - merged[-1]["top"]) < merged[-1]["height"] * 2.5
+            and last_top is not None
+            and (r["top"] - last_top) < r["height"] * 1.8   # normal line spacing
         ):
             merged[-1]["text"] += " " + r["text"]
         else:
             merged.append(r)
-    
+
+        last_top = r["top"]
+
     return pd.DataFrame(merged)
 
 # ---------------------------------------------------------------------------
