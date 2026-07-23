@@ -37,3 +37,16 @@ class AskResponse(BaseModel):
     question: str
     answer: str
     sources: list[Chunk]  # what the answer was grounded in, for transparency
+
+class Section(BaseModel):
+    title: str
+    page: int | None = None
+
+
+class Chapter(BaseModel):
+    title: str
+    sections: list[Section]
+
+
+class ChaptersResponse(BaseModel):
+    chapters: list[Chapter]

@@ -6,6 +6,8 @@ chromadb directly, so the vector store could later be swapped (pgvector,
 Qdrant, ...) without changing a single route handler.
 """
 
+from unittest import result
+
 import chromadb
 
 from schemas import Chunk
@@ -38,3 +40,7 @@ class ChromaRepository:
             Chunk(id=cid, text=doc, metadata=meta or {}, distance=dist)
             for cid, doc, meta, dist in zip(ids, documents, metadatas, distances)
         ]
+    
+    def all_metadata(self) -> list[dict]:
+        result = self._collection.get(include=["metadatas"])
+        return result["metadatas"]

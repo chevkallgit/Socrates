@@ -15,12 +15,14 @@ from contextlib import asynccontextmanager
 from anthropic import Anthropic
 from fastapi import Depends, FastAPI, HTTPException, Request
 
+from catalog import CatalogService
+from schemas import ChaptersResponse
 from config import Settings, get_settings
 from embedder import Embedder
 from rag import RagService
 from repository import ChromaRepository
 from schemas import AskRequest, AskResponse, SearchRequest, SearchResponse
-
+from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -39,16 +41,25 @@ async def lifespan(app: FastAPI):
         model=settings.answer_model,
         max_tokens=settings.max_tokens,
     )
+    app.state.catalog = CatalogService(repository=repository)
     yield  # app serves requests here; clients are GC'd on shutdown
 
 
 app = FastAPI(title="Socrates API", version="0.1.0", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- Dependency providers -------------------------------------------------
 def get_rag(request: Request) -> RagService:
     return request.app.state.rag
 
+def get_catalog(request: Request) -> CatalogService:
+    return request.app.state.catalog
 
 # --- Routes ---------------------------------------------------------------
 @app.get("/health")
@@ -77,3 +88,7 @@ def ask(
         raise HTTPException(status_code=503, detail="ANTHROPIC_API_KEY not configured")
     k = body.k or settings.top_k
     return rag.ask(body.question, k)
+
+@app.get("/chapters", response_model=ChaptersResponse)
+def chapters(catalog: CatalogService = Depends(get_catalog)) -> ChaptersResponse:
+    return ChaptersResponse(chapters=catalog.chapters())

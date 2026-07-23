@@ -87,7 +87,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-Interactive docs (try the endpoints from the browser): http://localhost:8000/docs
+Interactive docs (Swagger): http://localhost:8000/docs
 
 The Anthropic API key (needed only for `/ask`) goes in `api/.env`:
 
